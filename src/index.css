@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    @apply bg-ink-950 text-slate-300 font-sans antialiased;
+  }
+
+  ::selection {
+    @apply bg-accent/25 text-white;
+  }
+}
+
+@layer components {
+  .section-shell {
+    @apply mx-auto w-full max-w-content px-6 py-20 sm:px-8 md:py-28;
+  }
+
+  .card {
+    @apply rounded-xl border border-white/10 bg-ink-800/60 transition duration-300;
+  }
+
+  .card-hover {
+    @apply hover:-translate-y-1 hover:border-accent/30 hover:bg-ink-800;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300;
+  }
+
+  .link-underline {
+    @apply relative text-slate-300 transition-colors hover:text-accent;
+  }
+}
+
+/* Reveal-on-scroll (see useReveal hook) */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
