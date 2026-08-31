@@ -78,8 +78,8 @@ hidden.
 
 ### Swapping the resume
 
-Replace `public/Adam_Figgat_Resume.pdf` with an updated file of the same name, or
-point `profile.resume` at the new filename.
+Replace `public/Adam_Figgat_Software_Engineer_8.31.pdf` with an updated file of the
+same name, or point `profile.resume` at the new filename.
 
 ### Changing the accent color
 
@@ -156,7 +156,7 @@ src/
   index.css          Tailwind layers plus a few custom classes
   App.jsx            section order
 public/
-  Adam_Figgat_Resume.pdf
+  Adam_Figgat_Software_Engineer_8.31.pdf
   favicon.svg
   projects/          screenshot gallery images
 ```

@@ -11,7 +11,7 @@ export const profile = {
   phone: '760-814-7652',
   linkedin: 'https://www.linkedin.com/in/adam-figgat',
   github: 'https://adamfigg.github.io/',
-  resume: '/Adam_Figgat_Resume.pdf',
+  resume: '/Adam_Figgat_Software_Engineer_8.31.pdf',
   tagline:
     'I build enterprise web applications that people actually rely on. Nine years across fintech, healthcare, and e-commerce, mostly on the front end, always close to the product.',
   summary: [
@@ -47,7 +47,7 @@ export const skills = [
   },
   {
     group: 'Backend & Data',
-    items: ['Node.js', 'GraphQL', 'REST APIs', 'Elasticsearch', 'DynamoDB'],
+    items: ['Node.js', 'GraphQL', 'REST APIs', 'Elasticsearch', 'DynamoDB', 'Elixir'],
   },
   {
     group: 'AI-Assisted Development',
@@ -67,11 +67,12 @@ export const experience = [
     highlights: [
       'Owned multiple Invoice Financing onboarding experiences and key Line of Credit initiatives, leading front-end implementation from design through delivery with React, Angular, TypeScript, and GraphQL.',
       'Owned the front end of the Invoice Financing SendGrid ecosystem, supporting 15+ million transactional emails per month across onboarding, funding, repayment, and customer lifecycle communications.',
+      'Maintained and extended a production Elixir service, adding schema and query support for new fields across product expansions and resolving defects.',
       'Led cross-functional efforts with engineering, product, design, operations, and compliance to deliver scalable financial products, influencing architecture and implementation strategy.',
       'Mentored engineers, reviewed code, and led implementation efforts in a senior-level capacity across projects.',
       'Championed AI-driven development with Claude Code and GitHub Copilot to accelerate feature work, generate tests, and refactor complex code while maintaining high quality.',
     ],
-    stack: ['React', 'Angular', 'TypeScript', 'GraphQL', 'Node.js', 'SendGrid'],
+    stack: ['React', 'Angular', 'TypeScript', 'GraphQL', 'Node.js', 'SendGrid', 'Elixir'],
   },
   {
     role: 'Software Engineer',
