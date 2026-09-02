@@ -18,7 +18,7 @@ const FACE_Y = 59 // translateY% showing ears, eyes, and half the nose
 const BODY_Y = 20 // translateY% of the sprung-up pose (mid-belly)
 const TAP_MS = 3000 // bap-bap, then a pause
 const SIDE_OFFSET = 1.0 // cat parks this far (in cat widths) beside its target
-const RISE = 0.42 // the paw rises this fraction of the way to the button, max
+const BOW = 0.35 // how strongly the arm arches, as a fraction of its length
 
 const INK = '#0f172a'
 
@@ -29,6 +29,19 @@ const EYE_R = { x: 149, y: 90 }
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const lerp = (a, b, t) => a + (b - a) * t
 const clamp01 = (t) => Math.min(1, Math.max(0, t))
+
+// Quadratic bezier point and tangent, for the arm's arch.
+const bez = (a, c, b, t) => {
+  const u = 1 - t
+  return {
+    x: u * u * a.x + 2 * u * t * c.x + t * t * b.x,
+    y: u * u * a.y + 2 * u * t * c.y + t * t * b.y,
+  }
+}
+const bezTan = (a, c, b, t) => ({
+  x: 2 * (1 - t) * (c.x - a.x) + 2 * t * (b.x - c.x),
+  y: 2 * (1 - t) * (c.y - a.y) + 2 * t * (b.y - c.y),
+})
 
 export default function ScrollCat() {
   const overlayRef = useRef(null)
@@ -205,9 +218,10 @@ export default function ScrollCat() {
       if (Math.abs(shown.r - rT) < 0.004) shown.r = rT
 
       // The reach anchor eases toward the current target so a same-side
-      // retarget glides instead of snapping.
+      // retarget glides instead of snapping. The paw sits ON the buttons'
+      // bottom line, so the anchor is the underside itself.
       const bx = btnCx
-      const by = bRect ? bRect.bottom - 4 : vh * 0.5
+      const by = bRect ? bRect.bottom : vh * 0.5
       if (shown.r < 0.05) {
         shown.bx = bx
         shown.by = by
@@ -222,26 +236,14 @@ export default function ScrollCat() {
       }
       arm.style.opacity = '1'
 
-      // The reach: out of the near shoulder, low on the body, a short
-      // horizontal run, then a soft ~45° bend up TOWARD the button. The paw
-      // stops around halfway to it and paws at it from there — it never
-      // climbs more than halfway up.
+      // The reach: a smooth arch out of the near shoulder, low on the body,
+      // bowing up and over, with the paw landing on the buttons' bottom line.
       const S = {
         x: rect.left + rect.width * (armSide === 'left' ? 0.18 : 0.82),
         y: rect.top + rect.height * 0.72,
       }
-      const H = Math.abs(shown.bx - S.x)
-      const sgn = Math.sign(shown.bx - S.x) || -1
-      const fullV = Math.max(S.y - shown.by, 40)
-      const V = fullV * RISE
-      const L1 = Math.max(H - V, 12)
-      const elbow = { x: S.x + sgn * L1, y: S.y }
-      const ddx = shown.bx - elbow.x
-      const ddy = -V
-      const Ld = Math.hypot(ddx, ddy) || 1
-      const dir = { x: ddx / Ld, y: ddy / Ld }
 
-      // Two soft baps nudge the paw a little further along the reach.
+      // Two soft baps lift the paw briefly off the line onto the button.
       let w = 0
       if (!reduceMotion && shown.r > 0.9) {
         const tu = (now % TAP_MS) / TAP_MS
@@ -250,19 +252,21 @@ export default function ScrollCat() {
         w *= clamp01((shown.r - 0.9) / 0.1)
       }
 
-      const ext = easeInOut(shown.r) * (L1 + Ld) + 14 * w
-      const cr = Math.min(14, L1, Ld) // elbow radius
-      let d, tip, deg
-      if (ext <= L1) {
-        tip = { x: S.x + sgn * ext, y: S.y }
-        d = `M ${S.x} ${S.y} L ${tip.x} ${tip.y}`
-        deg = sgn < 0 ? 180 : 0
-      } else {
-        const dd = Math.min(ext - L1, Ld + 14)
-        tip = { x: elbow.x + dir.x * dd, y: elbow.y + dir.y * dd }
-        d = `M ${S.x} ${S.y} L ${S.x + sgn * (L1 - cr)} ${S.y} Q ${elbow.x} ${elbow.y} ${elbow.x + dir.x * cr} ${elbow.y + dir.y * cr} L ${tip.x} ${tip.y}`
-        deg = (Math.atan2(dir.y, dir.x) * 180) / Math.PI
-      }
+      const E = { x: shown.bx, y: shown.by - 10 * w }
+      const chord = { x: E.x - S.x, y: E.y - S.y }
+      const len = Math.hypot(chord.x, chord.y) || 1
+      // Perpendicular that points downward: the arm sweeps out and low, then
+      // curls up so the paw lands on the button from underneath.
+      let n = { x: -chord.y / len, y: chord.x / len }
+      if (n.y < 0) n = { x: -n.x, y: -n.y }
+      const C = { x: (S.x + E.x) / 2 + n.x * len * BOW, y: (S.y + E.y) / 2 + n.y * len * BOW }
+      const qe = easeInOut(shown.r)
+      const tip = bez(S, C, E, qe)
+      // Left segment of the curve split at qe: same start, control slid along.
+      const c1 = { x: lerp(S.x, C.x, qe), y: lerp(S.y, C.y, qe) }
+      const d = `M ${S.x} ${S.y} Q ${c1.x} ${c1.y} ${tip.x} ${tip.y}`
+      const tan = bezTan(S, C, E, qe)
+      const deg = (Math.atan2(tan.y, tan.x) * 180) / Math.PI
       limbInkRef.current.setAttribute('d', d)
       limbRef.current.setAttribute('d', d)
       pawRef.current.setAttribute('transform', `translate(${tip.x} ${tip.y}) rotate(${deg})`)
