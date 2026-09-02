@@ -54,6 +54,24 @@
   transform: none;
 }
 
+/* Blink for the scroll-cat easter egg (see components/ScrollCat.jsx) */
+.cat-eye {
+  animation: cat-blink 4.4s infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes cat-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.08);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -63,5 +81,9 @@
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .cat-eye {
+    animation: none;
   }
 }

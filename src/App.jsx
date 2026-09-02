@@ -6,6 +6,7 @@ import Experience from './components/Experience'
 import Projects from './components/Projects'
 import Contact from './components/Contact'
 import Footer from './components/Footer'
+import ScrollCat from './components/ScrollCat'
 import useReveal from './hooks/useReveal'
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Contact />
       </main>
       <Footer />
+      <ScrollCat />
     </>
   )
 }
