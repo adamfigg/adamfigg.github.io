@@ -55,6 +55,21 @@ export default function ScrollCat() {
     }
     window.addEventListener('pointermove', onPointerMove, { passive: true })
 
+    // Once the cat is up, hovering any contact link makes it scurry over and
+    // bap that one instead.
+    const hover = { el: null }
+    const links = Array.from(document.querySelectorAll('#contact a'))
+    const onEnter = (e) => {
+      hover.el = e.currentTarget
+    }
+    const onLeave = (e) => {
+      if (hover.el === e.currentTarget) hover.el = null
+    }
+    links.forEach((l) => {
+      l.addEventListener('pointerenter', onEnter)
+      l.addEventListener('pointerleave', onLeave)
+    })
+
     const frame = (now) => {
       raf = requestAnimationFrame(frame)
       const dt = Math.min(Math.max((now - last) / 1000, 1 / 120), 1 / 30)
@@ -70,8 +85,10 @@ export default function ScrollCat() {
       // to the visual viewport so bottom-0 always means the visible bottom.
       // (Skipped mid pinch-zoom, where chasing the viewport looks jittery.)
       const vv = window.visualViewport
-      if (vv && Math.abs(vv.scale - 1) < 0.02) {
-        overlayRef.current.style.height = `${vv.height + vv.offsetTop}px`
+      const vvOk = vv && Math.abs(vv.scale - 1) < 0.02
+      const viewBottom = vvOk ? vv.height + vv.offsetTop : window.innerHeight
+      if (vvOk) {
+        overlayRef.current.style.height = `${viewBottom}px`
       }
 
       const vh = window.innerHeight
@@ -84,12 +101,23 @@ export default function ScrollCat() {
       const catW = rect.width || 100
       // On mobile the contact buttons stack vertically, and an arm reaching
       // for the email button would drag across the links below it. The resume
-      // link is the bottom of the stack, so the cat baps that one instead.
+      // link is the bottom of the stack, so the cat baps that one instead —
+      // unless the cat is up and a link is hovered, which wins everywhere.
       const isMobile = vw < 640
-      const btn =
+      const defaultBtn =
         (isMobile && document.querySelector('#contact a[href$=".pdf"]')) ||
         document.querySelector('#contact a[href^="mailto:"]')
+      const btn = (p >= BOTTOM_AT && hover.el) || defaultBtn
       const bRect = btn && btn.getBoundingClientRect()
+
+      // On mobile, keep the cat above the footer's top line so it never sits
+      // on the site details at the bottom of the page.
+      let lift = 0
+      if (isMobile) {
+        const foot = document.querySelector('footer')
+        if (foot) lift = Math.max(0, viewBottom - foot.getBoundingClientRect().top)
+      }
+      cat.style.bottom = `${lift}px`
       const btnCx = bRect ? bRect.left + bRect.width / 2 : vw / 2
       const xRight = vw - catW - 8
       const xUnder = btnCx - catW / 2
@@ -121,7 +149,9 @@ export default function ScrollCat() {
       const tx = lerp(xRight, xUnder, u)
 
       if (shown.x === null) shown.x = tx
-      shown.x = lerp(shown.x, tx, slideEase)
+      // The creep is slow; the hover-chasing scurry at the bottom is quick.
+      const xEase = p >= BOTTOM_AT && !reduceMotion ? 0.16 : slideEase
+      shown.x = lerp(shown.x, tx, xEase)
       if (Math.abs(shown.x - tx) < 0.1) shown.x = tx
       if (reduceMotion) {
         shown.y = ty
@@ -185,7 +215,7 @@ export default function ScrollCat() {
       const dist = Math.hypot(T.x - S.x, T.y - S.y)
       const angle = Math.atan2(T.y - S.y, T.x - S.x)
       // Hover just short of the button; each bap pushes the paw onto it.
-      const len = (dist - 24 + 30 * w) * easeInOut(shown.q)
+      const len = Math.max(dist - 24 + 30 * w, 8) * easeInOut(shown.q)
       const E = { x: S.x + Math.cos(angle) * len, y: S.y + Math.sin(angle) * len }
       // Bow the arm gently to the side, like a relaxed limb.
       const n = dist > 1 ? { x: (E.y - S.y) / dist, y: -(E.x - S.x) / dist } : { x: 0, y: 0 }
@@ -203,6 +233,10 @@ export default function ScrollCat() {
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', onPointerMove)
+      links.forEach((l) => {
+        l.removeEventListener('pointerenter', onEnter)
+        l.removeEventListener('pointerleave', onLeave)
+      })
     }
   }, [])
 
