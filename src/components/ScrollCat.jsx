@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react'
 
-// Easter egg: a white cat that peeks up from the bottom edge as you scroll.
-// It appears at the far bottom-right once the Experience section scrolls into
-// view, showing only ears, eyes, and the top of its nose — low enough to never
-// block content. As you keep scrolling it slowly creeps sideways until it sits
-// directly under the contact email button, and only at the very bottom does
-// the body spring up so the cat can bap the button from below. Its eyes follow
-// the cursor the whole time. The reward for scrolling all the way down.
+// Easter egg (desktop only): a white cat that peeks up from the bottom edge as
+// you scroll. It appears at the far bottom-right once the Experience section
+// scrolls into view, showing only ears, eyes, and the top of its nose — low
+// enough to never block content. As you keep scrolling it slowly creeps
+// sideways toward the contact area, and only at the very bottom does the body
+// spring up so the cat can bap a contact link with an L-shaped arm. Hovering
+// any of the four contact links makes it drop the arm, scurry under that link,
+// and reach out again — the two left links get the left arm, the two right
+// links the right arm. Its eyes follow the cursor the whole time.
 //
 // Drawn as wobbly hand-sketched line art: white fill, dark ink outlines.
 // Everything is pointer-events-none, so it never intercepts a click.
@@ -15,6 +17,7 @@ const BOTTOM_AT = 0.995 // "the very bottom": where the body springs up
 const FACE_Y = 59 // translateY% showing ears, eyes, and half the nose
 const BODY_Y = 20 // translateY% of the sprung-up pose (mid-belly)
 const TAP_MS = 3000 // bap-bap, then a pause
+const SIDE_OFFSET = 0.6 // cat parks this far (in cat widths) beside its target
 
 const INK = '#0f172a'
 
@@ -38,14 +41,16 @@ export default function ScrollCat() {
 
   useEffect(() => {
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const armEase = reduceMotion ? 1 : 0.14
     const slideEase = reduceMotion ? 1 : 0.08
     // The body position runs on a slightly underdamped spring so the jump to
     // the full pose lands with a bounce instead of a glide.
     const spring = { k: 170, damp: 0.92 }
-    const shown = { x: null, y: 100, vy: 0, q: 0 }
+    // r is the arm's extension (0 retracted, 1 reaching the target). Changing
+    // targets drives r to 0 first, so the arm drops before reaching out again.
+    const shown = { x: null, y: 100, vy: 0, r: 0 }
     const gaze = { x: 0, y: 0 }
     const pointer = { x: null, y: null }
+    let armTarget = null
     let last = performance.now()
     let raf
 
@@ -56,11 +61,12 @@ export default function ScrollCat() {
     window.addEventListener('pointermove', onPointerMove, { passive: true })
 
     // Once the cat is up, hovering any contact link makes it scurry over and
-    // bap that one instead.
-    const hover = { el: null }
+    // bap that one. Leaving the links keeps the cat on the last one hovered.
+    const hover = { el: null, lastEl: null }
     const links = Array.from(document.querySelectorAll('#contact a'))
     const onEnter = (e) => {
       hover.el = e.currentTarget
+      hover.lastEl = e.currentTarget
     }
     const onLeave = (e) => {
       if (hover.el === e.currentTarget) hover.el = null
@@ -80,10 +86,9 @@ export default function ScrollCat() {
       if (!cat || !arm) return
 
       // Mobile browsers hide/show their URL bar while scrolling, and a fixed
-      // inset-0 overlay tracks the layout viewport, not the visible one — the
-      // cat would float above the real bottom edge. Pin the overlay's height
-      // to the visual viewport so bottom-0 always means the visible bottom.
-      // (Skipped mid pinch-zoom, where chasing the viewport looks jittery.)
+      // inset-0 overlay tracks the layout viewport, not the visible one. Pin
+      // the overlay's height to the visual viewport so bottom-0 always means
+      // the visible bottom. (Skipped mid pinch-zoom, where it looks jittery.)
       const vv = window.visualViewport
       const vvOk = vv && Math.abs(vv.scale - 1) < 0.02
       const viewBottom = vvOk ? vv.height + vv.offsetTop : window.innerHeight
@@ -96,31 +101,24 @@ export default function ScrollCat() {
       const max = document.documentElement.scrollHeight - vh
       const sy = window.scrollY
       const p = max > 0 ? clamp01(sy / max) : 0
+      const isMobile = vw < 640
 
       const rect = cat.getBoundingClientRect()
       const catW = rect.width || 100
-      // On mobile the contact buttons stack vertically, and an arm reaching
-      // for the email button would drag across the links below it. The resume
-      // link is the bottom of the stack, so the cat baps that one instead —
-      // unless the cat is up and a link is hovered, which wins everywhere.
-      const isMobile = vw < 640
-      const defaultBtn =
-        (isMobile && document.querySelector('#contact a[href$=".pdf"]')) ||
-        document.querySelector('#contact a[href^="mailto:"]')
-      const btn = (p >= BOTTOM_AT && hover.el) || defaultBtn
-      const bRect = btn && btn.getBoundingClientRect()
 
-      // On mobile, keep the cat above the footer's top line so it never sits
-      // on the site details at the bottom of the page.
-      let lift = 0
-      if (isMobile) {
-        const foot = document.querySelector('footer')
-        if (foot) lift = Math.max(0, viewBottom - foot.getBoundingClientRect().top)
-      }
-      cat.style.bottom = `${lift}px`
+      // The active target: the hovered link wins, then the last hovered one,
+      // then the email button. The two left links use the cat's left arm and
+      // the two right links its right arm, with the cat parked beside the
+      // target so the L-shaped reach reads clearly.
+      const btn =
+        hover.el || hover.lastEl || document.querySelector('#contact a[href^="mailto:"]')
+      const bRect = btn && btn.getBoundingClientRect()
+      const btnIdx = btn ? links.indexOf(btn) : 0
+      const side = btnIdx >= 2 ? 'right' : 'left' // which arm reaches
       const btnCx = bRect ? bRect.left + bRect.width / 2 : vw / 2
       const xRight = vw - catW - 8
-      const xUnder = btnCx - catW / 2
+      // Left arm: park to the right of the target; right arm: to the left.
+      const xUnder = btnCx - catW / 2 + (side === 'left' ? 1 : -1) * SIDE_OFFSET * catW
 
       // Vertical reveal is anchored to the Experience section ("where I've
       // worked"): the face creeps in as that section scrolls into view.
@@ -131,7 +129,8 @@ export default function ScrollCat() {
       const sEnd = max * BOTTOM_AT
 
       let ty, tq
-      if (max < vh * 0.75) {
+      if (isMobile || max < vh * 0.75) {
+        // No cat on mobile: the bottom edge is too crowded to share.
         ty = 100
         tq = 0
       } else if (p >= BOTTOM_AT) {
@@ -144,13 +143,13 @@ export default function ScrollCat() {
         tq = 0
       }
       // Sideways creep: far right while peeking in, then slowly over until the
-      // cat sits directly under the email button at the bottom.
+      // cat sits beside its contact-link target at the bottom.
       const u = sEnd > s1 ? clamp01((sy - s1) / (sEnd - s1)) : 1
       const tx = lerp(xRight, xUnder, u)
 
       if (shown.x === null) shown.x = tx
       // The creep is slow; the hover-chasing scurry at the bottom is quick.
-      const xEase = p >= BOTTOM_AT && !reduceMotion ? 0.16 : slideEase
+      const xEase = tq === 1 && !reduceMotion ? 0.16 : slideEase
       shown.x = lerp(shown.x, tx, xEase)
       if (Math.abs(shown.x - tx) < 0.1) shown.x = tx
       if (reduceMotion) {
@@ -164,12 +163,15 @@ export default function ScrollCat() {
           shown.vy = 0
         }
       }
-      shown.q = lerp(shown.q, tq, armEase)
-      if (Math.abs(shown.q - tq) < 0.002) shown.q = tq
 
       cat.style.transform = `translate(${shown.x}px, ${shown.y}%)`
 
-      // Eyes follow the cursor; with no pointer yet they eye the email button.
+      if (isMobile) {
+        arm.style.opacity = '0'
+        return
+      }
+
+      // Eyes follow the cursor; with no pointer yet they eye their target.
       const boxH = rect.height || catW * (300 / 220)
       const scale = catW / 220
       const lookAt = pointer.x !== null ? pointer : { x: btnCx, y: bRect ? bRect.top : vh * 0.5 }
@@ -191,43 +193,59 @@ export default function ScrollCat() {
         `translate(${gaze.x + (gr.x - gl.x)} ${gaze.y + (gr.y - gl.y)})`,
       )
 
-      if (shown.q <= 0.004) {
+      // Arm extension: retract on any target change, and only reach out once
+      // the cat is up, committed to this target, and done scurrying.
+      if (armTarget === null && shown.r < 0.05) armTarget = btn
+      if (armTarget !== btn && shown.r < 0.05) armTarget = btn
+      const settled = Math.abs(shown.x - tx) < 40
+      const rT = tq === 1 && armTarget === btn && settled ? 1 : 0
+      shown.r = lerp(shown.r, rT, reduceMotion ? 1 : 0.12)
+      if (Math.abs(shown.r - rT) < 0.004) shown.r = rT
+
+      if (shown.r <= 0.01 || !bRect) {
         arm.style.opacity = '0'
         return
       }
       arm.style.opacity = '1'
 
-      // Shoulder on the cat's LEFT side; the paw baps the button's underside,
-      // wherever it actually is right now, so the hit connects at any size.
-      const S = { x: rect.left + rect.width * 0.22, y: rect.top + rect.height * 0.45 }
-      const T = bRect
-        ? { x: btnCx, y: bRect.bottom - 4 }
-        : { x: vw / 2, y: vh * 0.5 }
+      // The L-shaped reach: out of the near shoulder, a short horizontal run,
+      // a rounded elbow, then straight up to the target's underside.
+      const aRect = (armTarget && armTarget.getBoundingClientRect()) || bRect
+      const aCx = aRect.left + aRect.width / 2
+      const S = {
+        x: rect.left + rect.width * (side === 'left' ? 0.2 : 0.8),
+        y: rect.top + rect.height * 0.45,
+      }
+      const E = { x: aCx, y: aRect.bottom - 4 }
+      const sgn = Math.sign(E.x - S.x) || -1
+      const L1 = Math.abs(E.x - S.x)
+      const L2 = Math.max(S.y - E.y - 14, 24) // rest just short of the button
 
-      // Two quick baps, then a pause. Skipped under reduced motion.
+      // Two quick baps push the paw tip up onto the button, then a pause.
       let w = 0
-      if (!reduceMotion) {
+      if (!reduceMotion && shown.r > 0.9) {
         const tu = (now % TAP_MS) / TAP_MS
         if (tu < 0.18) w = Math.sin(Math.PI * (tu / 0.18))
         else if (tu >= 0.24 && tu < 0.42) w = Math.sin(Math.PI * ((tu - 0.24) / 0.18))
+        w *= clamp01((shown.r - 0.9) / 0.1)
       }
 
-      const dist = Math.hypot(T.x - S.x, T.y - S.y)
-      const angle = Math.atan2(T.y - S.y, T.x - S.x)
-      // Hover just short of the button; each bap pushes the paw onto it.
-      const len = Math.max(dist - 24 + 30 * w, 8) * easeInOut(shown.q)
-      const E = { x: S.x + Math.cos(angle) * len, y: S.y + Math.sin(angle) * len }
-      // Bow the arm gently to the side, like a relaxed limb.
-      const n = dist > 1 ? { x: (E.y - S.y) / dist, y: -(E.x - S.x) / dist } : { x: 0, y: 0 }
-      const C = {
-        x: (S.x + E.x) / 2 + n.x * len * 0.15,
-        y: (S.y + E.y) / 2 + n.y * len * 0.15,
+      const ext = easeInOut(shown.r) * (L1 + L2) + 30 * w
+      const cr = Math.min(20, L1, L2) // elbow radius
+      let d, tip, deg
+      if (ext <= L1) {
+        tip = { x: S.x + sgn * ext, y: S.y }
+        d = `M ${S.x} ${S.y} L ${tip.x} ${tip.y}`
+        deg = sgn < 0 ? 180 : 0
+      } else {
+        const v = Math.min(ext - L1, L2 + 30)
+        tip = { x: E.x, y: S.y - Math.max(v, cr) }
+        d = `M ${S.x} ${S.y} L ${E.x - sgn * cr} ${S.y} Q ${E.x} ${S.y} ${E.x} ${S.y - cr} L ${tip.x} ${tip.y}`
+        deg = -90
       }
-      const d = `M ${S.x} ${S.y} Q ${C.x} ${C.y} ${E.x} ${E.y}`
       limbInkRef.current.setAttribute('d', d)
       limbRef.current.setAttribute('d', d)
-      const deg = (Math.atan2(E.y - C.y, E.x - C.x) * 180) / Math.PI
-      pawRef.current.setAttribute('transform', `translate(${E.x} ${E.y}) rotate(${deg})`)
+      pawRef.current.setAttribute('transform', `translate(${tip.x} ${tip.y}) rotate(${deg})`)
     }
     raf = requestAnimationFrame(frame)
     return () => {
@@ -255,8 +273,8 @@ export default function ScrollCat() {
         style={{ opacity: 0, filter: 'drop-shadow(0 0 5px rgba(2, 6, 23, 0.55))' }}
       >
         {/* a plain long tube — the rounded cap is the paw itself */}
-        <path ref={limbInkRef} d="" fill="none" stroke={INK} strokeWidth="21" strokeLinecap="round" />
-        <path ref={limbRef} d="" fill="none" stroke="#fff" strokeWidth="16" strokeLinecap="round" />
+        <path ref={limbInkRef} d="" fill="none" stroke={INK} strokeWidth="21" strokeLinecap="round" strokeLinejoin="round" />
+        <path ref={limbRef} d="" fill="none" stroke="#fff" strokeWidth="16" strokeLinecap="round" strokeLinejoin="round" />
         {/* toe beans drawn inside the tip of the tube */}
         <g ref={pawRef} fill="#fff" stroke={INK} strokeWidth="1.8">
           <ellipse cx="-8" cy="0" rx="3.6" ry="4.2" />
