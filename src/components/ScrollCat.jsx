@@ -82,7 +82,13 @@ export default function ScrollCat() {
 
       const rect = cat.getBoundingClientRect()
       const catW = rect.width || 100
-      const btn = document.querySelector('#contact a[href^="mailto:"]')
+      // On mobile the contact buttons stack vertically, and an arm reaching
+      // for the email button would drag across the links below it. The resume
+      // link is the bottom of the stack, so the cat baps that one instead.
+      const isMobile = vw < 640
+      const btn =
+        (isMobile && document.querySelector('#contact a[href$=".pdf"]')) ||
+        document.querySelector('#contact a[href^="mailto:"]')
       const bRect = btn && btn.getBoundingClientRect()
       const btnCx = bRect ? bRect.left + bRect.width / 2 : vw / 2
       const xRight = vw - catW - 8
