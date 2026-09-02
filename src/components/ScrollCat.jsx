@@ -27,6 +27,7 @@ const lerp = (a, b, t) => a + (b - a) * t
 const clamp01 = (t) => Math.min(1, Math.max(0, t))
 
 export default function ScrollCat() {
+  const overlayRef = useRef(null)
   const catRef = useRef(null)
   const armRef = useRef(null)
   const limbInkRef = useRef(null)
@@ -62,6 +63,16 @@ export default function ScrollCat() {
       const cat = catRef.current
       const arm = armRef.current
       if (!cat || !arm) return
+
+      // Mobile browsers hide/show their URL bar while scrolling, and a fixed
+      // inset-0 overlay tracks the layout viewport, not the visible one — the
+      // cat would float above the real bottom edge. Pin the overlay's height
+      // to the visual viewport so bottom-0 always means the visible bottom.
+      // (Skipped mid pinch-zoom, where chasing the viewport looks jittery.)
+      const vv = window.visualViewport
+      if (vv && Math.abs(vv.scale - 1) < 0.02) {
+        overlayRef.current.style.height = `${vv.height + vv.offsetTop}px`
+      }
 
       const vh = window.innerHeight
       const vw = window.innerWidth
@@ -190,7 +201,12 @@ export default function ScrollCat() {
   }, [])
 
   return (
-    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-40 overflow-hidden">
+    <div
+      ref={overlayRef}
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-x-0 top-0 z-40 h-screen overflow-hidden"
+      style={{ height: '100dvh' }}
+    >
       {/* The arm, drawn in viewport pixels. Rendered before the cat so the
           shoulder end hides behind the body. */}
       <svg
