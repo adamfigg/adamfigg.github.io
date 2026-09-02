@@ -17,7 +17,8 @@ const BOTTOM_AT = 0.995 // "the very bottom": where the body springs up
 const FACE_Y = 59 // translateY% showing ears, eyes, and half the nose
 const BODY_Y = 20 // translateY% of the sprung-up pose (mid-belly)
 const TAP_MS = 3000 // bap-bap, then a pause
-const SIDE_OFFSET = 0.6 // cat parks this far (in cat widths) beside its target
+const SIDE_OFFSET = 1.0 // cat parks this far (in cat widths) beside its target
+const RISE = 0.42 // the paw rises this fraction of the way to the button, max
 
 const INK = '#0f172a'
 
@@ -47,10 +48,10 @@ export default function ScrollCat() {
     const spring = { k: 170, damp: 0.92 }
     // r is the arm's extension (0 retracted, 1 reaching the target). Changing
     // targets drives r to 0 first, so the arm drops before reaching out again.
-    const shown = { x: null, y: 100, vy: 0, r: 0 }
+    const shown = { x: null, y: 100, vy: 0, r: 0, bx: 0, by: 0 }
     const gaze = { x: 0, y: 0 }
     const pointer = { x: null, y: null }
-    let armTarget = null
+    let armSide = null
     let last = performance.now()
     let raf
 
@@ -193,14 +194,27 @@ export default function ScrollCat() {
         `translate(${gaze.x + (gr.x - gl.x)} ${gaze.y + (gr.y - gl.y)})`,
       )
 
-      // Arm extension: retract on any target change, and only reach out once
-      // the cat is up, committed to this target, and done scurrying.
-      if (armTarget === null && shown.r < 0.05) armTarget = btn
-      if (armTarget !== btn && shown.r < 0.05) armTarget = btn
+      // Arm extension: retract only when switching SIDES (left arm to right
+      // arm). Moving between two same-side links keeps the arm up — the cat
+      // scurries and the reach glides over. A retracted arm waits for the
+      // scurry to finish before reaching out again.
+      if (armSide !== side && shown.r < 0.05) armSide = side
       const settled = Math.abs(shown.x - tx) < 40
-      const rT = tq === 1 && armTarget === btn && settled ? 1 : 0
+      const rT = tq === 1 && armSide === side && (shown.r >= 0.5 || settled) ? 1 : 0
       shown.r = lerp(shown.r, rT, reduceMotion ? 1 : 0.12)
       if (Math.abs(shown.r - rT) < 0.004) shown.r = rT
+
+      // The reach anchor eases toward the current target so a same-side
+      // retarget glides instead of snapping.
+      const bx = btnCx
+      const by = bRect ? bRect.bottom - 4 : vh * 0.5
+      if (shown.r < 0.05) {
+        shown.bx = bx
+        shown.by = by
+      } else {
+        shown.bx = lerp(shown.bx, bx, reduceMotion ? 1 : 0.15)
+        shown.by = lerp(shown.by, by, reduceMotion ? 1 : 0.15)
+      }
 
       if (shown.r <= 0.01 || !bRect) {
         arm.style.opacity = '0'
@@ -208,20 +222,26 @@ export default function ScrollCat() {
       }
       arm.style.opacity = '1'
 
-      // The L-shaped reach: out of the near shoulder, a short horizontal run,
-      // a rounded elbow, then straight up to the target's underside.
-      const aRect = (armTarget && armTarget.getBoundingClientRect()) || bRect
-      const aCx = aRect.left + aRect.width / 2
+      // The reach: out of the near shoulder, low on the body, a short
+      // horizontal run, then a soft ~45° bend up TOWARD the button. The paw
+      // stops around halfway to it and paws at it from there — it never
+      // climbs more than halfway up.
       const S = {
-        x: rect.left + rect.width * (side === 'left' ? 0.2 : 0.8),
-        y: rect.top + rect.height * 0.45,
+        x: rect.left + rect.width * (armSide === 'left' ? 0.18 : 0.82),
+        y: rect.top + rect.height * 0.72,
       }
-      const E = { x: aCx, y: aRect.bottom - 4 }
-      const sgn = Math.sign(E.x - S.x) || -1
-      const L1 = Math.abs(E.x - S.x)
-      const L2 = Math.max(S.y - E.y - 14, 24) // rest just short of the button
+      const H = Math.abs(shown.bx - S.x)
+      const sgn = Math.sign(shown.bx - S.x) || -1
+      const fullV = Math.max(S.y - shown.by, 40)
+      const V = fullV * RISE
+      const L1 = Math.max(H - V, 12)
+      const elbow = { x: S.x + sgn * L1, y: S.y }
+      const ddx = shown.bx - elbow.x
+      const ddy = -V
+      const Ld = Math.hypot(ddx, ddy) || 1
+      const dir = { x: ddx / Ld, y: ddy / Ld }
 
-      // Two quick baps push the paw tip up onto the button, then a pause.
+      // Two soft baps nudge the paw a little further along the reach.
       let w = 0
       if (!reduceMotion && shown.r > 0.9) {
         const tu = (now % TAP_MS) / TAP_MS
@@ -230,18 +250,18 @@ export default function ScrollCat() {
         w *= clamp01((shown.r - 0.9) / 0.1)
       }
 
-      const ext = easeInOut(shown.r) * (L1 + L2) + 30 * w
-      const cr = Math.min(20, L1, L2) // elbow radius
+      const ext = easeInOut(shown.r) * (L1 + Ld) + 14 * w
+      const cr = Math.min(14, L1, Ld) // elbow radius
       let d, tip, deg
       if (ext <= L1) {
         tip = { x: S.x + sgn * ext, y: S.y }
         d = `M ${S.x} ${S.y} L ${tip.x} ${tip.y}`
         deg = sgn < 0 ? 180 : 0
       } else {
-        const v = Math.min(ext - L1, L2 + 30)
-        tip = { x: E.x, y: S.y - Math.max(v, cr) }
-        d = `M ${S.x} ${S.y} L ${E.x - sgn * cr} ${S.y} Q ${E.x} ${S.y} ${E.x} ${S.y - cr} L ${tip.x} ${tip.y}`
-        deg = -90
+        const dd = Math.min(ext - L1, Ld + 14)
+        tip = { x: elbow.x + dir.x * dd, y: elbow.y + dir.y * dd }
+        d = `M ${S.x} ${S.y} L ${S.x + sgn * (L1 - cr)} ${S.y} Q ${elbow.x} ${elbow.y} ${elbow.x + dir.x * cr} ${elbow.y + dir.y * cr} L ${tip.x} ${tip.y}`
+        deg = (Math.atan2(dir.y, dir.x) * 180) / Math.PI
       }
       limbInkRef.current.setAttribute('d', d)
       limbRef.current.setAttribute('d', d)
